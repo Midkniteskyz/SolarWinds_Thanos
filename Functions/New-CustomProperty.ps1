@@ -42,7 +42,7 @@ function New-CustomProperty {
     .NOTES
         Name: New-CustomProperty
         Author: Ryan Woolsey
-        Last Edit: <Last Edit Date>
+        Last Edit: 9-17-2024
         Version: 1.0
         Keywords: SolarWinds, Custom Property, OrionSDK, PowerShell
 
@@ -190,5 +190,3 @@ function New-CustomProperty {
         }
     }
 }
-
-# New-CustomProperty -Hostname $servers -Username $Username -Password $password -PropertyName "test105" -ValueType "string" -Verbose
