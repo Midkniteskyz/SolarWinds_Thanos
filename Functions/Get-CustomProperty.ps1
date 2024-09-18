@@ -202,5 +202,3 @@ LEFT JOIN
         }
     }
 }
-
-# Get-CustomProperty -Hostname 'localhost' -Username $Username -Password $Password -PropertyName "Test*"
