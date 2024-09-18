@@ -1,0 +1,199 @@
+function Add-CustomPropertyValues {
+    <#
+    .SYNOPSIS
+        Adds new values to an existing custom property on multiple SolarWinds Orion servers.
+
+    .DESCRIPTION
+        This function connects to specified SolarWinds servers and updates the custom property with new values. 
+        It ensures that the custom property already exists before adding values, and combines the existing values with the new ones without duplicates.
+
+    .PARAMETER Hostname
+        An array of hostnames for SolarWinds servers. If not provided, the function reads from 'servers.txt'.
+
+    .PARAMETER Username
+        The username for authenticating the connection to the SolarWinds Information Service (SWIS).
+
+    .PARAMETER Password
+        The password associated with the provided username for connecting to SWIS.
+
+    .PARAMETER PropertyName
+        The name of the custom property you want to update with new values.
+
+    .PARAMETER NewValues
+        An array of new values to add to the custom property.
+
+    .EXAMPLE
+        C:\PS> Add-CustomPropertyValues -Hostname "solarwinds-server1" -Username "admin" -Password "password" -PropertyName "Department" -NewValues "Finance", "Operations"
+        
+        This will add "Finance" and "Operations" to the "Department" custom property on "solarwinds-server1".
+
+    .NOTES
+        Name: Add-CustomPropertyValues
+        Author: Ryan Woolsey
+        Last Edit: <Last Edit Date>
+        Version: 1.0
+        Keywords: SolarWinds, Custom Property, OrionSDK, PowerShell
+
+    .LINK
+        https://github.com/solarwinds/OrionSDK/wiki/PowerShell
+    .INPUTS
+        None. The function accepts input from parameters.
+    .OUTPUTS
+        System.Object. Custom property update details.
+    #Requires -Version 2.0
+    #>
+
+    [CmdletBinding()]
+    param (
+        [Parameter(
+            Mandatory = $false,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true,
+            HelpMessage = "Enter one or more hostnames for the SolarWinds server(s). If not provided, servers will be read from servers.txt."
+        )]
+        [string[]]$Hostname,
+
+        [Parameter(Mandatory = $true, HelpMessage = "Enter the username for the SWIS connection.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$Username,
+
+        [Parameter(Mandatory = $true, HelpMessage = "Enter the password for the SWIS connection.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$Password,
+
+        [Parameter(Mandatory = $true, HelpMessage = "Enter the custom property name to update.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$PropertyName,
+
+        [Parameter(Mandatory = $true, HelpMessage = "Enter the new values to add to the custom property.")]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$NewValues
+    )
+
+    Begin {
+        Write-Verbose -Message "Entering the BEGIN block."
+
+        # Define the root directory using $PSScriptRoot
+        $scriptRoot = $PSScriptRoot
+
+        # Load the server list from servers.txt if no Hostname is provided
+        if (-not $Hostname) {
+            $serverFilePath = Join-Path -Path $scriptRoot -ChildPath "servers.txt"
+            
+            if (Test-Path $serverFilePath) {
+                $Hostname = Get-Content -Path $serverFilePath
+                Write-Verbose -Message "Hostnames loaded from servers.txt."
+            } else {
+                Write-Error "No hostnames were provided and servers.txt could not be found."
+                return
+            }
+        }
+
+        # Initialize the results table
+        $updatedProperties = @()
+
+        # Define the base SWQL query to fetch existing custom property values
+        $baseQuery = @"
+SELECT 
+    CP.Table, 
+    CP.Field, 
+    CP.MaxLength, 
+    CP.Description, 
+    CPV.Value
+FROM 
+    Orion.CustomProperty AS CP
+LEFT JOIN 
+    Orion.CustomPropertyValues AS CPV
+    ON CP.Table = CPV.Table 
+    AND CP.Field = CPV.Field
+WHERE CP.Field = '$PropertyName'
+"@
+    }
+
+    Process {
+        foreach ($server in $Hostname) {
+            Write-Host "Connecting to $server..."
+
+            # Attempt to connect to SWIS
+            try {
+                $swis = Connect-Swis -Hostname $server -Username $Username -Password $Password
+
+                if ($swis) {
+                    Write-Host "Successfully connected to $server" -ForegroundColor Green
+                    Write-Verbose -Message "Connection to $server established."
+                }
+            } catch {
+                Write-Error "Failed to connect to $server. Error: $_"
+                continue # Skip to the next host if connection fails
+            }
+
+            # Attempt to run the SWQL query
+            try {
+                # Check if the custom property exists
+                $queryParams = @{
+                    SwisConnection = $swis
+                    Query          = $baseQuery
+                }
+                $existingProperty = Get-SwisData @queryParams
+
+                if ($existingProperty) {
+                    Write-Host "Custom property '$PropertyName' exists on $server. Updating values..."
+                    Write-Verbose -Message "Custom property '$PropertyName' found on $server."
+
+                    # Retrieve the existing values for the custom property
+                    [array]$existingValues = $existingProperty.Value
+
+                    # Combine existing values with the new values (ensure no duplicates)
+                    $combinedValues = ($existingValues + $NewValues) | Sort-Object -Unique
+
+                    # Modify the existing custom property to add the new values
+                    $params = @(
+                        $PropertyName, # Custom property name
+                        $existingProperty[0].Description, # Keep the same description
+                        $existingProperty[0].MaxLength, # Keep the same max length (size)
+                        [string[]]$combinedValues           # Updated list of values
+                    )
+
+                    # Update the custom property values
+                    try {
+                        Invoke-SwisVerb -SwisConnection $swis -EntityName 'Orion.NodesCustomProperties' -Verb 'ModifyCustomProperty' -Arguments $params -ErrorAction Stop
+                        Write-Host "Successfully updated custom property '$PropertyName' on $server." -ForegroundColor Green
+
+                        # Add to the results
+                        $updatedProperties += [pscustomobject]@{
+                            Server = $server
+                            PropertyName = $PropertyName
+                            UpdatedValues = $combinedValues -join ", "
+                        }
+
+                    } catch {
+                        Write-Error "Failed to update custom property '$PropertyName' on $server. Error: $_"
+                        continue # Skip to the next host if query fails
+                    }
+
+                } else {
+                    Write-Error "Failed to update '$PropertyName' on $server. The property does not exist."
+                    continue
+                }
+
+            } catch {
+                Write-Error "Failed to execute SWQL query on $server. Error: $_"
+                continue # Skip to the next host if query fails
+            }
+        }
+    }
+
+    End {
+        Write-Verbose -Message "Entering the END block."
+
+        if ($updatedProperties.Count -gt 0) {
+            Write-Host "`nUpdated Custom Properties:" -ForegroundColor Cyan
+            $updatedProperties | Format-Table -AutoSize
+        } else {
+            Write-Host "No custom properties were updated."
+        }
+    }
+}
+
+
+# Add-CustomPropertyValues -Hostname 'localhost' -Username $username -Password $password -PropertyName 'Test99' -NewValues 'Value4', 'Value2', 'Value99' -Verbose
