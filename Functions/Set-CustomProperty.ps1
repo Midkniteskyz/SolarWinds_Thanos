@@ -192,9 +192,3 @@ WHERE Field = '$PropertyName'
 
     }
 }
-
-# Example usage: Add new values to the existing 'Device_Function' custom property
-$servers = @('10.57.15.206', '10.56.15.206', '10.58.15.206')
-$PropertyName = 'Test7'
-
-Set-CustomProperty -Hostname 'localhost' -Username 'loop1' -Password '30DayPassword!' -PropertyName $PropertyName -Values (Get-Content -Path ".\NewCPValues.txt") -Verbose
