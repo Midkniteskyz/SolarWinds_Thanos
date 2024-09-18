@@ -30,7 +30,7 @@ function Add-CustomPropertyValues {
     .NOTES
         Name: Add-CustomPropertyValues
         Author: Ryan Woolsey
-        Last Edit: <Last Edit Date>
+        Last Edit: 9-17-2024
         Version: 1.0
         Keywords: SolarWinds, Custom Property, OrionSDK, PowerShell
 
@@ -194,6 +194,3 @@ WHERE CP.Field = '$PropertyName'
         }
     }
 }
-
-
-# Add-CustomPropertyValues -Hostname 'localhost' -Username $username -Password $password -PropertyName 'Test99' -NewValues 'Value4', 'Value2', 'Value99' -Verbose
