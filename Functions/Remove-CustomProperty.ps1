@@ -27,7 +27,7 @@ function Remove-CustomProperty {
     .NOTES
         Name: Remove-CustomProperty
         Author: Ryan Woolsey
-        Last Edit: <Last Edit Date>
+        Last Edit: 9-17-2024
         Version: 1.0
         Keywords: SolarWinds, Custom Property, OrionSDK, PowerShell
 
@@ -181,6 +181,3 @@ WHERE Field LIKE '$PropertyName'
         }
     }
 }
-
-# Example usage:
-Remove-CustomProperty -Hostname 'localhost' -Username $Username -Password $Password -PropertyName 'Test7' -Verbose
